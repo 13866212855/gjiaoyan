@@ -15,14 +15,12 @@ import {
   CheckCircle2,
   Printer,
   Eye,
-  FileSpreadsheet,
 } from 'lucide-react';
 import { Activity, UploadItem } from '@/lib/db';
 import { resolveFileUrl } from '@/lib/utils';
 import TeachingPlanModal from '@/components/TeachingPlanModal';
 import ListeningNotesModal from '@/components/ListeningNotesModal';
 import LightboxModal from '@/components/LightboxModal';
-import SummaryPptModal from '@/components/SummaryPptModal';
 
 export default function HomePage() {
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -34,7 +32,6 @@ export default function HomePage() {
   // Modals state
   const [teachingPlanOpen, setTeachingPlanOpen] = useState(false);
   const [listeningNotesOpen, setListeningNotesOpen] = useState(false);
-  const [summaryPptOpen, setSummaryPptOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [lightboxTitle, setLightboxTitle] = useState<string>('');
 
@@ -68,12 +65,6 @@ export default function HomePage() {
 
   const photos =
     currentActivity?.uploads?.filter((u) => u.file_type === 'activity_photo') || [];
-  const attendanceSheet = currentActivity?.uploads?.find(
-    (u) => u.file_type === 'attendance_sheet'
-  );
-  const summaryImg = currentActivity?.uploads?.find(
-    (u) => u.file_type === 'summary_image'
-  );
   const pptUpload = currentActivity?.uploads?.find((u) => u.file_type === 'ppt');
   const listeningNotes =
     currentActivity?.uploads?.filter((u) => u.file_type === 'listening_note') || [];
@@ -195,15 +186,6 @@ export default function HomePage() {
                 >
                   <FileText className="w-4 h-4" />
                   查看电子教案
-                </button>
-
-                <button
-                  id="view-summary-ppt-btn"
-                  onClick={() => setSummaryPptOpen(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#e08e00] hover:bg-[#c97f00] text-white rounded-lg text-sm font-medium shadow-xs transition-all hover:scale-105"
-                >
-                  <FileSpreadsheet className="w-4 h-4 text-amber-200" />
-                  活动总结单页PPT (4图标准版)
                 </button>
               </div>
             </div>
@@ -344,50 +326,6 @@ export default function HomePage() {
                 )}
               </div>
             </div>
-
-            {/* Section 6: 签到表与总结材料（如果有） */}
-            {(attendanceSheet || summaryImg) && (
-              <div className="space-y-3 pt-3 border-t border-gray-100">
-                <h3 className="text-sm font-bold text-gray-800">活动资料存档:</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {attendanceSheet && (
-                    <div
-                      onClick={() => {
-                        const src = resolveFileUrl(attendanceSheet.file_path);
-                        setLightboxImage(src);
-                        setLightboxTitle('成员签到表');
-                      }}
-                      className="cursor-pointer rounded-xl border border-gray-200 p-2 text-center bg-gray-50 hover:bg-gray-100 transition-colors"
-                    >
-                      <img
-                        src={resolveFileUrl(attendanceSheet.file_path)}
-                        alt="签到表"
-                        className="w-full h-36 object-cover rounded-lg mb-1"
-                      />
-                      <span className="text-xs font-medium text-gray-700">成员签到表 (点击放大)</span>
-                    </div>
-                  )}
-
-                  {summaryImg && (
-                    <div
-                      onClick={() => {
-                        const src = resolveFileUrl(summaryImg.file_path);
-                        setLightboxImage(src);
-                        setLightboxTitle('活动总结材料');
-                      }}
-                      className="cursor-pointer rounded-xl border border-gray-200 p-2 text-center bg-gray-50 hover:bg-gray-100 transition-colors"
-                    >
-                      <img
-                        src={resolveFileUrl(summaryImg.file_path)}
-                        alt="活动总结"
-                        className="w-full h-36 object-cover rounded-lg mb-1"
-                      />
-                      <span className="text-xs font-medium text-gray-700">活动总结材料 (点击放大)</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
           </article>
         )}
       </main>
@@ -418,16 +356,6 @@ export default function HomePage() {
             date={currentActivity.activity_date}
             notesContent={currentActivity.listening_notes_template || ''}
             canEdit={false}
-          />
-
-          <SummaryPptModal
-            isOpen={summaryPptOpen}
-            onClose={() => setSummaryPptOpen(false)}
-            activity={currentActivity}
-            onOpenLightbox={(src, title) => {
-              setLightboxImage(src);
-              setLightboxTitle(title);
-            }}
           />
         </>
       )}
