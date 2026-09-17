@@ -813,7 +813,7 @@ export default function AdminPage() {
               id="current-user-badge"
               className="px-3 py-1.5 rounded-lg bg-white/15 text-white font-medium border border-white/10"
             >
-              当前用户: {user.name}
+              当前用户: {user.name} ({user.role === 'admin' ? '系统管理员' : '教研组成员'})
             </span>
 
             {/* Links & buttons */}
@@ -1010,21 +1010,42 @@ export default function AdminPage() {
           {/* Section Header */}
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <h2 className="text-xl font-bold text-gray-900">活动列表</h2>
+              <h2 className="text-xl font-bold text-gray-900">
+                {user.role === 'admin' ? '活动列表' : '教研活动 · 听课记录提交'}
+              </h2>
               <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
                 共 {activities.length} 期活动
               </span>
             </div>
 
-            <button
-              id="print-all-activities-btn"
-              onClick={() => handlePrint(activities)}
-              className="px-4 py-2 text-sm font-medium text-white bg-[#10b981] hover:bg-[#059669] rounded-lg shadow-xs flex items-center gap-1.5 transition-colors"
-            >
-              <Printer className="w-4 h-4" />
-              一键打印全部
-            </button>
+            {user.role === 'admin' && (
+              <button
+                id="print-all-activities-btn"
+                onClick={() => handlePrint(activities)}
+                className="px-4 py-2 text-sm font-medium text-white bg-[#10b981] hover:bg-[#059669] rounded-lg shadow-xs flex items-center gap-1.5 transition-colors"
+              >
+                <Printer className="w-4 h-4" />
+                一键打印全部
+              </button>
+            )}
           </div>
+
+          {/* Member welcome banner */}
+          {user.role !== 'admin' && (
+            <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 border border-purple-200/80 rounded-xl text-xs text-purple-900 flex items-center justify-between gap-3 shadow-2xs">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-[#5b52a3] text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Users className="w-4.5 h-4.5" />
+                </div>
+                <div>
+                  <p className="font-bold text-gray-900 text-sm">欢迎您，{user.name} 老师！</p>
+                  <p className="text-purple-700 mt-0.5">
+                    在下方各期教研活动中，您可以直接上传或更换您的听课笔记照片（支持手机原图或微信聊天记录直接拖入上传）。
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Activities List */}
           {dataLoading ? (
@@ -1050,6 +1071,7 @@ export default function AdminPage() {
                 const pptUpload = act.uploads?.find((u) => u.file_type === 'ppt');
                 const listeningNotes =
                   act.uploads?.filter((u) => u.file_type === 'listening_note') || [];
+                const myNote = listeningNotes.find((n) => n.member_id === user.id);
 
                 const listenersText =
                   act.listeners && act.listeners.length > 0
@@ -1120,338 +1142,468 @@ export default function AdminPage() {
                       </span>
                     </div>
 
-                    {/* Management & Upload Blocks */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
-                      {/* Block A: 现场照片 / 全员合影 */}
-                      <div className="p-4 bg-gray-50/80 rounded-xl border border-gray-200/80 space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
-                            <Camera className="w-3.5 h-3.5 text-[#5b52a3]" />
-                            活动现场照片 ({photos.length})
-                          </span>
-                          <button
-                            id={`upload-photo-btn-${act.id}`}
-                            onClick={() => triggerUpload(act.id, 'activity_photo')}
-                            className="px-2.5 py-1 text-xs text-white bg-[#5b52a3] hover:bg-[#4d4491] rounded flex items-center gap-1"
-                          >
-                            <Upload className="w-3 h-3" />
-                            选择文件
-                          </button>
-                        </div>
-
-                        {/* Drag and Drop Zone for Photos */}
-                        <DragDropUploadBox
-                          onUpload={(files) => handleDirectUpload(files, act.id, 'activity_photo')}
-                          accept="image/*"
-                          multiple={true}
-                          label="直接拖入现场照片（支持多选）"
-                          sublabel="可将微信聊天记录中的图片直接拖入立即上传"
-                          colorTheme="purple"
-                          compact={photos.length > 0}
-                        />
-
-                        {photos.length > 0 ? (
-                          <div className="grid grid-cols-3 gap-2 pt-1">
-                            {photos.map((p) => {
-                              const src = resolveFileUrl(p.file_path);
-                              return (
-                                <div
-                                  key={p.id}
-                                  className="group relative rounded-lg overflow-hidden border border-gray-200 aspect-square bg-gray-100"
-                                >
-                                  <img
-                                    src={src}
-                                    alt={p.file_name}
-                                    className="w-full h-full object-cover cursor-pointer"
-                                    onClick={() => {
-                                      setLightboxImage(src);
-                                      setLightboxTitle(p.file_name);
-                                    }}
-                                  />
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDeleteUpload(p.id, `现场照片 (${p.file_name})`);
-                                    }}
-                                    className="absolute top-1.5 right-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md p-1 shadow-md transition-all duration-150 flex items-center justify-center opacity-90 group-hover:opacity-100 hover:scale-105"
-                                    title="删除此照片"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <p className="text-[11px] text-gray-400 italic py-1 text-center">暂无上传的照片</p>
-                        )}
-                      </div>
-
-                      {/* Block B: 签到表与活动总结 */}
-                      <div className="p-4 bg-gray-50/80 rounded-xl border border-gray-200/80 space-y-2.5">
-                        <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
-                          <FileCheck className="w-3.5 h-3.5 text-emerald-600" />
-                          签到表与活动总结
-                        </span>
-
-                        <div className="space-y-2.5">
-                          {/* 签到表项 */}
-                          <div className="bg-white p-2.5 rounded-lg border border-gray-200 space-y-1.5">
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="text-gray-700 font-medium">
-                                签到表: {attendance ? '已上传' : '未上传'}
-                              </span>
-                              <div className="flex items-center gap-1.5">
-                                {attendance && (
-                                  <>
-                                    <button
-                                      onClick={() => {
-                                        const src = resolveFileUrl(attendance.file_path);
-                                        setLightboxImage(src);
-                                        setLightboxTitle('成员签到表');
-                                      }}
-                                      className="text-xs text-blue-600 hover:underline"
-                                    >
-                                      查看
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteUpload(attendance.id, '成员签到表')}
-                                      className="text-xs text-red-600 hover:underline"
-                                    >
-                                      删除
-                                    </button>
-                                  </>
-                                )}
-                                <button
-                                  onClick={() => triggerUpload(act.id, 'attendance_sheet')}
-                                  className="px-2 py-0.5 text-xs text-white bg-emerald-600 hover:bg-emerald-700 rounded"
-                                >
-                                  {attendance ? '重选' : '选择'}
-                                </button>
-                              </div>
-                            </div>
-                            <DragDropUploadBox
-                              onUpload={(files) => handleDirectUpload(files, act.id, 'attendance_sheet')}
-                              accept="image/*"
-                              multiple={false}
-                              label={attendance ? '拖入更换签到表' : '拖入上传签到表'}
-                              sublabel="微信图片直接拖入立即上传"
-                              colorTheme="emerald"
-                              compact={true}
-                            />
-                          </div>
-
-                          {/* 总结材料项 */}
-                          <div className="bg-white p-2.5 rounded-lg border border-gray-200 space-y-1.5">
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="text-gray-700 font-medium">
-                                总结材料: {summaryImg ? '已上传' : '未上传'}
-                              </span>
-                              <div className="flex items-center gap-1.5">
-                                {summaryImg && (
-                                  <>
-                                    <button
-                                      onClick={() => {
-                                        const src = resolveFileUrl(summaryImg.file_path);
-                                        setLightboxImage(src);
-                                        setLightboxTitle('活动总结材料');
-                                      }}
-                                      className="text-xs text-blue-600 hover:underline"
-                                    >
-                                      查看
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteUpload(summaryImg.id, '活动总结材料')}
-                                      className="text-xs text-red-600 hover:underline"
-                                    >
-                                      删除
-                                    </button>
-                                  </>
-                                )}
-                                <button
-                                  onClick={() => triggerUpload(act.id, 'summary_image')}
-                                  className="px-2 py-0.5 text-xs text-white bg-indigo-600 hover:bg-indigo-700 rounded"
-                                >
-                                  {summaryImg ? '重选' : '选择'}
-                                </button>
-                              </div>
-                            </div>
-                            <DragDropUploadBox
-                              onUpload={(files) => handleDirectUpload(files, act.id, 'summary_image')}
-                              accept="image/*"
-                              multiple={false}
-                              label={summaryImg ? '拖入更换总结图' : '拖入上传总结图'}
-                              sublabel="微信图片直接拖入立即上传"
-                              colorTheme="indigo"
-                              compact={true}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Block C: 教案与课件 PPT */}
-                      <div className="p-4 bg-gray-50/80 rounded-xl border border-gray-200/80 space-y-2.5">
-                        <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
-                          <Layers className="w-3.5 h-3.5 text-blue-600" />
-                          教学教案与课件资源
-                        </span>
-
-                        <div className="space-y-2.5">
-                          <div className="flex items-center justify-between text-xs bg-white p-2.5 rounded-lg border border-gray-200">
-                            <span className="text-gray-700 font-medium">电子教案</span>
+                    {/* 管理员界面：完整的 3 块资料上传与管理 (现场照片、签到表/总结、教案/课件) */}
+                    {user.role === 'admin' && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+                        {/* Block A: 现场照片 / 全员合影 */}
+                        <div className="p-4 bg-gray-50/80 rounded-xl border border-gray-200/80 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                              <Camera className="w-3.5 h-3.5 text-[#5b52a3]" />
+                              活动现场照片 ({photos.length})
+                            </span>
                             <button
-                              id={`open-teaching-plan-btn-${act.id}`}
-                              onClick={() => setTeachingPlanModalAct(act)}
-                              className="px-2.5 py-1 text-xs text-white bg-[#4975e8] hover:bg-[#3862cc] rounded flex items-center gap-1"
+                              id={`upload-photo-btn-${act.id}`}
+                              onClick={() => triggerUpload(act.id, 'activity_photo')}
+                              className="px-2.5 py-1 text-xs text-white bg-[#5b52a3] hover:bg-[#4d4491] rounded flex items-center gap-1"
                             >
-                              <FileText className="w-3 h-3" />
-                              查看/编辑教案
+                              <Upload className="w-3 h-3" />
+                              选择文件
                             </button>
                           </div>
 
-                          <div className="bg-white p-2.5 rounded-lg border border-gray-200 space-y-1.5">
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="text-gray-700 font-medium truncate max-w-[140px]">
-                                课件PPT: {pptUpload ? pptUpload.file_name : '待上传'}
-                              </span>
-                              <div className="flex items-center gap-1.5">
-                                {pptUpload && (
-                                  <button
-                                    onClick={() => handleDeleteUpload(pptUpload.id, `课件PPT (${pptUpload.file_name})`)}
-                                    className="text-xs text-red-600 hover:underline"
-                                  >
-                                    删除
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => triggerUpload(act.id, 'ppt')}
-                                  className="px-2 py-0.5 text-xs text-white bg-teal-600 hover:bg-teal-700 rounded"
-                                >
-                                  {pptUpload ? '重选' : '选择'}
-                                </button>
-                              </div>
-                            </div>
-                            <DragDropUploadBox
-                              onUpload={(files) => handleDirectUpload(files, act.id, 'ppt')}
-                              accept=".ppt,.pptx,.pdf"
-                              multiple={false}
-                              label={pptUpload ? '拖入更换PPT课件' : '拖入上传课件PPT'}
-                              sublabel="支持.pptx/.ppt直接拖入"
-                              colorTheme="teal"
-                              compact={true}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                          {/* Drag and Drop Zone for Photos */}
+                          <DragDropUploadBox
+                            onUpload={(files) => handleDirectUpload(files, act.id, 'activity_photo')}
+                            accept="image/*"
+                            multiple={true}
+                            label="直接拖入现场照片（支持多选）"
+                            sublabel="可将微信聊天记录中的图片直接拖入立即上传"
+                            colorTheme="purple"
+                            compact={photos.length > 0}
+                          />
 
-                    {/* Block D: 成员听课记录管理 (核心功能：管理员可为所有人传，成员登录可为自己传) */}
-                    <div className="pt-3 border-t border-gray-100">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
-                          <Users className="w-3.5 h-3.5 text-[#5b52a3]" />
-                          成员听课记录管理
-                        </h4>
-                        <button
-                          id={`open-listening-notes-btn-${act.id}`}
-                          onClick={() => setListeningNotesModalAct(act)}
-                          className="text-xs text-blue-600 hover:underline flex items-center gap-1"
-                        >
-                          <Sparkles className="w-3 h-3 text-purple-600" />
-                          查看/编辑听课记录文字版样例 (AI生成)
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-                        {act.listeners && act.listeners.length > 0 ? (
-                          act.listeners.map((listener) => {
-                            const note = listeningNotes.find(
-                              (n) => n.member_id === listener.id
-                            );
-                            const canUploadThisMember =
-                              user.role === 'admin' || user.id === listener.id;
-
-                            if (note) {
-                              const src = resolveFileUrl(note.file_path);
-                              return (
-                                <div
-                                  key={listener.id}
-                                  className="p-2.5 bg-white border border-gray-200 rounded-xl text-center space-y-2"
-                                >
+                          {photos.length > 0 ? (
+                            <div className="grid grid-cols-3 gap-2 pt-1">
+                              {photos.map((p) => {
+                                const src = resolveFileUrl(p.file_path);
+                                return (
                                   <div
-                                    className="cursor-pointer rounded-lg overflow-hidden aspect-4/3 bg-gray-100 border relative group"
-                                    onClick={() => {
-                                      setLightboxImage(src);
-                                      setLightboxTitle(`${listener.name} 听课笔记`);
-                                    }}
+                                    key={p.id}
+                                    className="group relative rounded-lg overflow-hidden border border-gray-200 aspect-square bg-gray-100"
                                   >
                                     <img
                                       src={src}
-                                      alt={listener.name}
-                                      className="w-full h-full object-cover"
+                                      alt={p.file_name}
+                                      className="w-full h-full object-cover cursor-pointer"
+                                      onClick={() => {
+                                        setLightboxImage(src);
+                                        setLightboxTitle(p.file_name);
+                                      }}
                                     />
-                                    <span className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px]">
-                                      查看大图
-                                    </span>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteUpload(p.id, `现场照片 (${p.file_name})`);
+                                      }}
+                                      className="absolute top-1.5 right-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md p-1 shadow-md transition-all duration-150 flex items-center justify-center opacity-90 group-hover:opacity-100 hover:scale-105"
+                                      title="删除此照片"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
                                   </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-gray-400 italic py-1 text-center">暂无上传的照片</p>
+                          )}
+                        </div>
 
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs font-semibold text-gray-800">
-                                      {listener.name}
-                                    </span>
-                                    {canUploadThisMember && (
+                        {/* Block B: 签到表与活动总结 */}
+                        <div className="p-4 bg-gray-50/80 rounded-xl border border-gray-200/80 space-y-2.5">
+                          <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                            <FileCheck className="w-3.5 h-3.5 text-emerald-600" />
+                            签到表与活动总结
+                          </span>
+
+                          <div className="space-y-2.5">
+                            {/* 签到表项 */}
+                            <div className="bg-white p-2.5 rounded-lg border border-gray-200 space-y-1.5">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-gray-700 font-medium">
+                                  签到表: {attendance ? '已上传' : '未上传'}
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  {attendance && (
+                                    <>
                                       <button
-                                        onClick={() => handleDeleteUpload(note.id, `${listener.name}的听课记录`)}
-                                        className="text-xs text-red-500 hover:text-red-700"
-                                        title="删除"
+                                        onClick={() => {
+                                          const src = resolveFileUrl(attendance.file_path);
+                                          setLightboxImage(src);
+                                          setLightboxTitle('成员签到表');
+                                        }}
+                                        className="text-xs text-blue-600 hover:underline"
+                                      >
+                                        查看
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteUpload(attendance.id, '成员签到表')}
+                                        className="text-xs text-red-600 hover:underline"
                                       >
                                         删除
                                       </button>
-                                    )}
+                                    </>
+                                  )}
+                                  <button
+                                    onClick={() => triggerUpload(act.id, 'attendance_sheet')}
+                                    className="px-2 py-0.5 text-xs text-white bg-emerald-600 hover:bg-emerald-700 rounded"
+                                  >
+                                    {attendance ? '重选' : '选择'}
+                                  </button>
+                                </div>
+                              </div>
+                              <DragDropUploadBox
+                                onUpload={(files) => handleDirectUpload(files, act.id, 'attendance_sheet')}
+                                accept="image/*"
+                                multiple={false}
+                                label={attendance ? '拖入更换签到表' : '拖入上传签到表'}
+                                sublabel="微信图片直接拖入立即上传"
+                                colorTheme="emerald"
+                                compact={true}
+                              />
+                            </div>
+
+                            {/* 总结材料项 */}
+                            <div className="bg-white p-2.5 rounded-lg border border-gray-200 space-y-1.5">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-gray-700 font-medium">
+                                  总结材料: {summaryImg ? '已上传' : '未上传'}
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  {summaryImg && (
+                                    <>
+                                      <button
+                                        onClick={() => {
+                                          const src = resolveFileUrl(summaryImg.file_path);
+                                          setLightboxImage(src);
+                                          setLightboxTitle('活动总结材料');
+                                        }}
+                                        className="text-xs text-blue-600 hover:underline"
+                                      >
+                                        查看
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteUpload(summaryImg.id, '活动总结材料')}
+                                        className="text-xs text-red-600 hover:underline"
+                                      >
+                                        删除
+                                      </button>
+                                    </>
+                                  )}
+                                  <button
+                                    onClick={() => triggerUpload(act.id, 'summary_image')}
+                                    className="px-2 py-0.5 text-xs text-white bg-indigo-600 hover:bg-indigo-700 rounded"
+                                  >
+                                    {summaryImg ? '重选' : '选择'}
+                                  </button>
+                                </div>
+                              </div>
+                              <DragDropUploadBox
+                                onUpload={(files) => handleDirectUpload(files, act.id, 'summary_image')}
+                                accept="image/*"
+                                multiple={false}
+                                label={summaryImg ? '拖入更换总结图' : '拖入上传总结图'}
+                                sublabel="微信图片直接拖入立即上传"
+                                colorTheme="indigo"
+                                compact={true}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Block C: 教案与课件 PPT */}
+                        <div className="p-4 bg-gray-50/80 rounded-xl border border-gray-200/80 space-y-2.5">
+                          <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                            <Layers className="w-3.5 h-3.5 text-blue-600" />
+                            教学教案与课件资源
+                          </span>
+
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between text-xs bg-white p-2.5 rounded-lg border border-gray-200">
+                              <span className="text-gray-700 font-medium">电子教案</span>
+                              <button
+                                id={`open-teaching-plan-btn-${act.id}`}
+                                onClick={() => setTeachingPlanModalAct(act)}
+                                className="px-2.5 py-1 text-xs text-white bg-[#4975e8] hover:bg-[#3862cc] rounded flex items-center gap-1"
+                              >
+                                <FileText className="w-3 h-3" />
+                                查看/编辑教案
+                              </button>
+                            </div>
+
+                            <div className="bg-white p-2.5 rounded-lg border border-gray-200 space-y-1.5">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-gray-700 font-medium truncate max-w-[140px]">
+                                  课件PPT: {pptUpload ? pptUpload.file_name : '待上传'}
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  {pptUpload && (
+                                    <button
+                                      onClick={() => handleDeleteUpload(pptUpload.id, `课件PPT (${pptUpload.file_name})`)}
+                                      className="text-xs text-red-600 hover:underline"
+                                    >
+                                      删除
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => triggerUpload(act.id, 'ppt')}
+                                    className="px-2 py-0.5 text-xs text-white bg-teal-600 hover:bg-teal-700 rounded"
+                                  >
+                                    {pptUpload ? '重选' : '选择'}
+                                  </button>
+                                </div>
+                              </div>
+                              <DragDropUploadBox
+                                onUpload={(files) => handleDirectUpload(files, act.id, 'ppt')}
+                                accept=".ppt,.pptx,.pdf"
+                                multiple={false}
+                                label={pptUpload ? '拖入更换PPT课件' : '拖入上传课件PPT'}
+                                sublabel="支持.pptx/.ppt直接拖入"
+                                colorTheme="teal"
+                                compact={true}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 管理员界面 Block D: 成员听课记录全员管理网格 */}
+                    {user.role === 'admin' && (
+                      <div className="pt-3 border-t border-gray-100">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                            <Users className="w-3.5 h-3.5 text-[#5b52a3]" />
+                            成员听课记录管理
+                          </h4>
+                          <button
+                            id={`open-listening-notes-btn-${act.id}`}
+                            onClick={() => setListeningNotesModalAct(act)}
+                            className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                          >
+                            <Sparkles className="w-3 h-3 text-purple-600" />
+                            查看/编辑听课记录文字版样例 (AI生成)
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                          {act.listeners && act.listeners.length > 0 ? (
+                            act.listeners.map((listener) => {
+                              const note = listeningNotes.find(
+                                (n) => n.member_id === listener.id
+                              );
+                              const canUploadThisMember =
+                                user.role === 'admin' || user.id === listener.id;
+
+                              if (note) {
+                                const src = resolveFileUrl(note.file_path);
+                                return (
+                                  <div
+                                    key={listener.id}
+                                    className="p-2.5 bg-white border border-gray-200 rounded-xl text-center space-y-2"
+                                  >
+                                    <div
+                                      className="cursor-pointer rounded-lg overflow-hidden aspect-4/3 bg-gray-100 border relative group"
+                                      onClick={() => {
+                                        setLightboxImage(src);
+                                        setLightboxTitle(`${listener.name} 听课笔记`);
+                                      }}
+                                    >
+                                      <img
+                                        src={src}
+                                        alt={listener.name}
+                                        className="w-full h-full object-cover"
+                                      />
+                                      <span className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px]">
+                                        查看大图
+                                      </span>
+                                    </div>
+
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs font-semibold text-gray-800">
+                                        {listener.name}
+                                      </span>
+                                      {canUploadThisMember && (
+                                        <button
+                                          onClick={() => handleDeleteUpload(note.id, `${listener.name}的听课记录`)}
+                                          className="text-xs text-red-500 hover:text-red-700"
+                                          title="删除"
+                                        >
+                                          删除
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
+                                );
+                              }
+
+                              return (
+                                <div
+                                  key={listener.id}
+                                  className="p-3 bg-gray-50/80 border-2 border-dashed border-gray-200 rounded-xl text-center flex flex-col justify-between items-center min-h-32"
+                                >
+                                  <div className="mb-2">
+                                    <span className="text-xs font-semibold text-gray-700 block">
+                                      {listener.name}
+                                    </span>
+                                    <span className="text-[11px] text-gray-400">听课记录待上传</span>
+                                  </div>
+
+                                  {canUploadThisMember ? (
+                                    <div className="w-full">
+                                      <DragDropUploadBox
+                                        onUpload={(files) =>
+                                          handleDirectUpload(files, act.id, 'listening_note', listener.id)
+                                        }
+                                        accept="image/*"
+                                        multiple={false}
+                                        label="拖入/上传笔记"
+                                        sublabel="微信图片可直接拖入"
+                                        colorTheme="purple"
+                                        compact={true}
+                                      />
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] text-gray-400">仅本人或管理员可传</span>
+                                  )}
                                 </div>
                               );
-                            }
+                            })
+                          ) : (
+                            <div className="col-span-5 text-center text-xs text-gray-400 py-4">
+                              本次活动未设置听课人
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
-                            return (
-                              <div
-                                key={listener.id}
-                                className="p-3 bg-gray-50/80 border-2 border-dashed border-gray-200 rounded-xl text-center flex flex-col justify-between items-center min-h-32"
-                              >
-                                <div className="mb-2">
-                                  <span className="text-xs font-semibold text-gray-700 block">
-                                    {listener.name}
-                                  </span>
-                                  <span className="text-[11px] text-gray-400">听课记录待上传</span>
+                    {/* 普通成员专属界面：极简实用，仅保留自己上传/管理听课记录的功能 */}
+                    {user.role !== 'admin' && (
+                      <div className="pt-2">
+                        {isPresenter ? (
+                          <div className="p-4 bg-purple-50/70 border border-purple-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-purple-900">
+                            <div className="flex items-center gap-2.5">
+                              <CheckCircle2 className="w-4.5 h-4.5 text-purple-600 shrink-0" />
+                              <span>
+                                您是本次活动的<strong>授课教师</strong>（{act.instructor_name}），教研组已归档您的开课信息，无需提交听课记录。
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => setTeachingPlanModalAct(act)}
+                              className="px-3 py-1.5 bg-white border border-purple-300 text-purple-700 hover:bg-purple-100 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shrink-0 shadow-2xs"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              查看本期电子教案
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="p-4 sm:p-5 bg-purple-50/40 border border-purple-200 rounded-xl space-y-3.5">
+                                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-purple-100 pb-2.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-[#5b52a3]"></span>
+                                    <h4 className="text-sm font-bold text-gray-900">我的听课记录上传</h4>
+                                    {myNote ? (
+                                      <span className="px-2.5 py-0.5 text-xs font-semibold bg-emerald-100 text-emerald-800 rounded-full flex items-center gap-1">
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                        已上传完成
+                                      </span>
+                                    ) : (
+                                      <span className="px-2.5 py-0.5 text-xs font-semibold bg-amber-100 text-amber-800 rounded-full flex items-center gap-1">
+                                        <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                                        待上传听课笔记照片
+                                      </span>
+                                    )}
+                                  </div>
+                                  <button
+                                    id={`open-listening-notes-btn-${act.id}`}
+                                    onClick={() => setListeningNotesModalAct(act)}
+                                    className="text-xs text-purple-700 hover:text-purple-900 hover:underline flex items-center gap-1 font-medium"
+                                  >
+                                    <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                                    参考听课记录文字样例 (AI生成)
+                                  </button>
                                 </div>
 
-                                {canUploadThisMember ? (
-                                  <div className="w-full">
+                                {myNote ? (
+                                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs">
+                                    <div
+                                      className="cursor-pointer rounded-lg overflow-hidden w-28 sm:w-36 h-24 sm:h-28 bg-gray-100 border border-gray-200 shrink-0 relative group shadow-2xs"
+                                      onClick={() => {
+                                        const src = resolveFileUrl(myNote.file_path);
+                                        setLightboxImage(src);
+                                        setLightboxTitle(`${user.name} 的听课笔记照片`);
+                                      }}
+                                    >
+                                      <img
+                                        src={resolveFileUrl(myNote.file_path)}
+                                        alt="我的听课记录"
+                                        className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                                      />
+                                      <span className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-medium">
+                                        点击放大查看
+                                      </span>
+                                    </div>
+
+                                    <div className="flex-1 min-w-0 space-y-1.5">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm font-semibold text-gray-900 truncate">
+                                          {myNote.file_name}
+                                        </span>
+                                        <span className="text-[11px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded font-medium">
+                                          已同步至系统档案
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-gray-500">
+                                        您的听课记录照片已妥善归档。如需更新或重拍，可直接点击下方更换。
+                                      </p>
+                                      <div className="flex items-center gap-2 pt-1">
+                                        <button
+                                          onClick={() => triggerUpload(act.id, 'listening_note', user.id)}
+                                          className="px-3 py-1.5 text-xs text-white bg-[#5b52a3] hover:bg-[#4d4491] rounded-lg transition-colors flex items-center gap-1 font-medium shadow-2xs"
+                                        >
+                                          <Upload className="w-3 h-3" />
+                                          重新选择上传
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteUpload(myNote.id, '我的听课记录')}
+                                          className="px-3 py-1.5 text-xs text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors flex items-center gap-1 font-medium"
+                                        >
+                                          <Trash2 className="w-3 h-3" />
+                                          删除记录
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2">
                                     <DragDropUploadBox
                                       onUpload={(files) =>
-                                        handleDirectUpload(files, act.id, 'listening_note', listener.id)
+                                        handleDirectUpload(files, act.id, 'listening_note', user.id)
                                       }
                                       accept="image/*"
                                       multiple={false}
-                                      label="拖入/上传笔记"
-                                      sublabel="微信图片可直接拖入"
+                                      label="点击选择图片 或 直接拖入您的听课记录照片"
+                                      sublabel="支持手机拍照原图、微信聊天记录截图直接拖入立即上传"
                                       colorTheme="purple"
-                                      compact={true}
+                                      compact={false}
                                     />
+                                    <div className="flex justify-end">
+                                      <button
+                                        onClick={() => triggerUpload(act.id, 'listening_note', user.id)}
+                                        className="px-4 py-1.5 text-xs text-white bg-[#5b52a3] hover:bg-[#4d4491] rounded-lg transition-colors flex items-center gap-1.5 shadow-2xs font-medium"
+                                      >
+                                        <Upload className="w-3.5 h-3.5" />
+                                        从本地相册/文件夹选择照片上传
+                                      </button>
+                                    </div>
                                   </div>
-                                ) : (
-                                  <span className="text-[10px] text-gray-400">仅本人或管理员可传</span>
                                 )}
                               </div>
-                            );
-                          })
-                        ) : (
-                          <div className="col-span-5 text-center text-xs text-gray-400 py-4">
-                            本次活动未设置听课人
-                          </div>
-                        )}
+                            )}
                       </div>
-                    </div>
+                    )}
 
                     {/* Bottom Action bar */}
                     <div className="flex flex-wrap items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
@@ -1464,23 +1616,27 @@ export default function AdminPage() {
                         前台展示效果
                       </Link>
 
-                      <button
-                        id={`open-summary-ppt-btn-${act.id}`}
-                        onClick={() => setSummaryPptModalAct(act)}
-                        className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#e08e00] hover:bg-[#c97f00] rounded-lg flex items-center gap-1.5 shadow-xs transition-all hover:scale-105"
-                      >
-                        <FileSpreadsheet className="w-3.5 h-3.5 text-white" />
-                        活动总结单页PPT (4图标准版)
-                      </button>
+                      {user.role === 'admin' && (
+                        <>
+                          <button
+                            id={`open-summary-ppt-btn-${act.id}`}
+                            onClick={() => setSummaryPptModalAct(act)}
+                            className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#e08e00] hover:bg-[#c97f00] rounded-lg flex items-center gap-1.5 shadow-xs transition-all hover:scale-105"
+                          >
+                            <FileSpreadsheet className="w-3.5 h-3.5 text-white" />
+                            活动总结单页PPT (4图标准版)
+                          </button>
 
-                      <button
-                        id={`print-single-act-btn-${act.id}`}
-                        onClick={() => handlePrint([act])}
-                        className="px-3 py-1.5 text-xs font-medium text-white bg-[#5b52a3] hover:bg-[#4d4491] rounded-lg flex items-center gap-1.5 transition-colors"
-                      >
-                        <Printer className="w-3.5 h-3.5" />
-                        打印本期教研记录
-                      </button>
+                          <button
+                            id={`print-single-act-btn-${act.id}`}
+                            onClick={() => handlePrint([act])}
+                            className="px-3 py-1.5 text-xs font-medium text-white bg-[#5b52a3] hover:bg-[#4d4491] rounded-lg flex items-center gap-1.5 transition-colors"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            打印本期教研记录
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 );
