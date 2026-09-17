@@ -18,6 +18,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { Activity, UploadItem } from '@/lib/db';
+import { resolveFileUrl } from '@/lib/utils';
 import TeachingPlanModal from '@/components/TeachingPlanModal';
 import ListeningNotesModal from '@/components/ListeningNotesModal';
 import LightboxModal from '@/components/LightboxModal';
@@ -213,8 +214,10 @@ export default function HomePage() {
               {pptUpload ? (
                 <a
                   id="download-ppt-btn"
-                  href={pptUpload.file_path.startsWith('/') ? pptUpload.file_path : `/${pptUpload.file_path}`}
+                  href={resolveFileUrl(pptUpload.file_path)}
                   download={pptUpload.file_name}
+                  target="_blank"
+                  rel="noreferrer"
                   className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
                 >
                   <FileText className="w-4 h-4" />
@@ -231,9 +234,7 @@ export default function HomePage() {
               {photos.length > 0 ? (
                 <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   {photos.map((photo, pIdx) => {
-                    const src = photo.file_path.startsWith('/')
-                      ? photo.file_path
-                      : `/${photo.file_path}`;
+                    const src = resolveFileUrl(photo.file_path);
                     return (
                       <div
                         key={photo.id}
@@ -299,9 +300,7 @@ export default function HomePage() {
                     );
 
                     if (noteUpload) {
-                      const src = noteUpload.file_path.startsWith('/')
-                        ? noteUpload.file_path
-                        : `/${noteUpload.file_path}`;
+                      const src = resolveFileUrl(noteUpload.file_path);
                       return (
                         <div
                           key={listener.id}
@@ -354,20 +353,14 @@ export default function HomePage() {
                   {attendanceSheet && (
                     <div
                       onClick={() => {
-                        const src = attendanceSheet.file_path.startsWith('/')
-                          ? attendanceSheet.file_path
-                          : `/${attendanceSheet.file_path}`;
+                        const src = resolveFileUrl(attendanceSheet.file_path);
                         setLightboxImage(src);
                         setLightboxTitle('成员签到表');
                       }}
                       className="cursor-pointer rounded-xl border border-gray-200 p-2 text-center bg-gray-50 hover:bg-gray-100 transition-colors"
                     >
                       <img
-                        src={
-                          attendanceSheet.file_path.startsWith('/')
-                            ? attendanceSheet.file_path
-                            : `/${attendanceSheet.file_path}`
-                        }
+                        src={resolveFileUrl(attendanceSheet.file_path)}
                         alt="签到表"
                         className="w-full h-36 object-cover rounded-lg mb-1"
                       />
@@ -378,20 +371,14 @@ export default function HomePage() {
                   {summaryImg && (
                     <div
                       onClick={() => {
-                        const src = summaryImg.file_path.startsWith('/')
-                          ? summaryImg.file_path
-                          : `/${summaryImg.file_path}`;
+                        const src = resolveFileUrl(summaryImg.file_path);
                         setLightboxImage(src);
                         setLightboxTitle('活动总结材料');
                       }}
                       className="cursor-pointer rounded-xl border border-gray-200 p-2 text-center bg-gray-50 hover:bg-gray-100 transition-colors"
                     >
                       <img
-                        src={
-                          summaryImg.file_path.startsWith('/')
-                            ? summaryImg.file_path
-                            : `/${summaryImg.file_path}`
-                        }
+                        src={resolveFileUrl(summaryImg.file_path)}
                         alt="活动总结"
                         className="w-full h-36 object-cover rounded-lg mb-1"
                       />

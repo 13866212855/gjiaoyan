@@ -14,7 +14,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getCurrentUser();
+    const user = await getCurrentUser(req);
     if (!user || user.role !== 'admin') {
       return NextResponse.json({ success: false, message: '需要管理员权限' }, { status: 403 });
     }

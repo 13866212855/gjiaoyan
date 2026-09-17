@@ -26,11 +26,11 @@ export async function GET(
 }
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getCurrentUser();
+    const user = await getCurrentUser(req);
     if (!user || user.role !== 'admin') {
       return NextResponse.json({ success: false, message: '需要管理员权限才能删除活动' }, { status: 403 });
     }
@@ -49,7 +49,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getCurrentUser();
+    const user = await getCurrentUser(req);
     if (!user) {
       return NextResponse.json({ success: false, message: '请先登录' }, { status: 401 });
     }

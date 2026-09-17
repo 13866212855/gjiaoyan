@@ -12,17 +12,20 @@ export async function POST(req: NextRequest) {
 
     const trimmedUser = username.trim();
 
+    const isHttps = req.nextUrl.protocol === 'https:' || process.env.NODE_ENV === 'production';
+
     // 1. 管理员登录
     if (trimmedUser === 'admin' && password === 'admin123') {
       const user = { id: 0, name: '管理员', role: 'admin' as const };
       const token = encodeSession(user);
 
-      const response = NextResponse.json({ success: true, user });
+      const response = NextResponse.json({ success: true, user, token });
       response.cookies.set(COOKIE_NAME, token, {
         path: '/',
         httpOnly: false, // 允许前端JS读取提升交互体验
         maxAge: 60 * 60 * 24 * 30, // 30天
-        sameSite: 'lax',
+        sameSite: isHttps ? 'none' : 'lax',
+        secure: isHttps,
       });
       return response;
     }
@@ -35,12 +38,13 @@ export async function POST(req: NextRequest) {
         const user = { id: member.id, name: member.name, role: 'member' as const };
         const token = encodeSession(user);
 
-        const response = NextResponse.json({ success: true, user });
+        const response = NextResponse.json({ success: true, user, token });
         response.cookies.set(COOKIE_NAME, token, {
           path: '/',
           httpOnly: false,
           maxAge: 60 * 60 * 24 * 30,
-          sameSite: 'lax',
+          sameSite: isHttps ? 'none' : 'lax',
+          secure: isHttps,
         });
         return response;
       }

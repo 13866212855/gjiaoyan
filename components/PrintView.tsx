@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Activity } from '@/lib/db';
+import { resolveFileUrl } from '@/lib/utils';
 
 interface PrintViewProps {
   activities: Activity[];
@@ -105,7 +106,7 @@ export default function PrintView({ activities, isAll = false }: PrintViewProps)
                 {photos.slice(0, 4).map((p, idx) => (
                   <div key={p.id} className="border border-gray-300 p-1 text-center">
                     <img
-                      src={p.file_path.startsWith('/') ? p.file_path : `/${p.file_path}`}
+                      src={resolveFileUrl(p.file_path)}
                       alt={`现场照片 ${idx + 1}`}
                       className="w-full h-44 object-cover"
                     />
@@ -125,7 +126,7 @@ export default function PrintView({ activities, isAll = false }: PrintViewProps)
                   {attendance && (
                     <div className="border border-gray-300 p-1 text-center">
                       <img
-                        src={attendance.file_path.startsWith('/') ? attendance.file_path : `/${attendance.file_path}`}
+                        src={resolveFileUrl(attendance.file_path)}
                         alt="签到表"
                         className="w-full h-48 object-cover"
                       />
@@ -135,7 +136,7 @@ export default function PrintView({ activities, isAll = false }: PrintViewProps)
                   {summaryImg && (
                     <div className="border border-gray-300 p-1 text-center">
                       <img
-                        src={summaryImg.file_path.startsWith('/') ? summaryImg.file_path : `/${summaryImg.file_path}`}
+                        src={resolveFileUrl(summaryImg.file_path)}
                         alt="活动总结"
                         className="w-full h-48 object-cover"
                       />
@@ -156,7 +157,7 @@ export default function PrintView({ activities, isAll = false }: PrintViewProps)
                   {listeningNotes.map((ln) => (
                     <div key={ln.id} className="border border-gray-300 p-1 text-center">
                       <img
-                        src={ln.file_path.startsWith('/') ? ln.file_path : `/${ln.file_path}`}
+                        src={resolveFileUrl(ln.file_path)}
                         alt={ln.file_name}
                         className="w-full h-44 object-cover"
                       />

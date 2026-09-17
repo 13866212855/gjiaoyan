@@ -23,8 +23,13 @@ import {
   FileCheck,
   Image as ImageIcon,
   FileSpreadsheet,
+  CheckCircle2,
+  Info,
+  X,
+  Loader2,
 } from 'lucide-react';
 import { Activity, Member, UploadItem } from '@/lib/db';
+import { resolveFileUrl } from '@/lib/utils';
 import MemberManagementModal from '@/components/MemberManagementModal';
 import DisplaySettingsModal from '@/components/DisplaySettingsModal';
 import LlmConfigModal from '@/components/LlmConfigModal';
@@ -34,6 +39,7 @@ import LightboxModal from '@/components/LightboxModal';
 import PrintView from '@/components/PrintView';
 import SummaryPptModal from '@/components/SummaryPptModal';
 import DragDropUploadBox from '@/components/DragDropUploadBox';
+import { compressImageIfNeeded } from '@/lib/imageCompressor';
 
 interface CurrentUser {
   id: number;
@@ -41,8 +47,76 @@ interface CurrentUser {
   role: 'admin' | 'member';
 }
 
+// Helper to retrieve auth token (localStorage or cookie or user-cache base64)
+function getStoredAuthToken(fallbackUser?: CurrentUser | null): string | null {
+  if (typeof window === 'undefined') return null;
+  let token = localStorage.getItem('gpm_auth_token');
+  if (token) return token;
+
+  // Try document.cookie
+  try {
+    const match = document.cookie.match(/gpm_auth_session=([^;]+)/);
+    if (match && match[1]) {
+      token = decodeURIComponent(match[1]);
+      localStorage.setItem('gpm_auth_token', token);
+      return token;
+    }
+  } catch {
+    // ignore
+  }
+
+  // Fallback to user session in localStorage
+  let u = fallbackUser;
+  if (!u) {
+    try {
+      const cached = localStorage.getItem('gpm_auth_user');
+      if (cached) u = JSON.parse(cached);
+    } catch {
+      // ignore
+    }
+  }
+  if (u && u.name && (u.role === 'admin' || u.role === 'member')) {
+    try {
+      token = btoa(unescape(encodeURIComponent(JSON.stringify({ id: u.id, name: u.name, role: u.role }))));
+      localStorage.setItem('gpm_auth_token', token);
+      return token;
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
+// Stable fetch wrapper that injects Authorization headers
+function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const token = getStoredAuthToken();
+  const headers = new Headers(init.headers || {});
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+    headers.set('x-auth-token', token);
+  }
+  return fetch(url, {
+    ...init,
+    headers,
+    credentials: 'include',
+  });
+}
+
 export default function AdminPage() {
-  const [user, setUser] = useState<CurrentUser | null>(null);
+  const [user, setUser] = useState<CurrentUser | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('gpm_auth_user');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.name) return parsed;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return null;
+  });
   const [authChecking, setAuthChecking] = useState(true);
 
   // Login form state
@@ -88,13 +162,38 @@ export default function AdminPage() {
   } | null>(null);
   const [uploading, setUploading] = useState(false);
 
+  // In-app Toast message state
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type });
+  };
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => {
+      setToast(null);
+    }, 3500);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  // In-app Delete Confirmation Modal state (zero window.confirm dependency for iframe safety)
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    confirmLabel?: string;
+    onConfirm: () => Promise<void> | void;
+    isProcessing?: boolean;
+  } | null>(null);
+
   // 2. Fetch members and activities
   const loadData = async () => {
     try {
       setDataLoading(true);
       const [membersRes, actsRes] = await Promise.all([
-        fetch('/api/members'),
-        fetch('/api/activities?show_all=true'),
+        authFetch('/api/members'),
+        authFetch('/api/activities?show_all=true'),
       ]);
       const membersData = await membersRes.json();
       const actsData = await actsRes.json();
@@ -115,21 +214,31 @@ export default function AdminPage() {
 
   useEffect(() => {
     let ignore = false;
-    fetch('/api/auth/me')
+    authFetch('/api/auth/me')
       .then((res) => res.json())
       .then((data) => {
         if (!ignore) {
           if (data.authenticated && data.user) {
             setUser(data.user);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('gpm_auth_user', JSON.stringify(data.user));
+              getStoredAuthToken(data.user);
+            }
           } else {
-            setUser(null);
+            const currentToken = getStoredAuthToken();
+            if (!currentToken) {
+              setUser(null);
+              if (typeof window !== 'undefined') {
+                localStorage.removeItem('gpm_auth_user');
+                localStorage.removeItem('gpm_auth_token');
+              }
+            }
           }
           setAuthChecking(false);
         }
       })
       .catch(() => {
         if (!ignore) {
-          setUser(null);
           setAuthChecking(false);
         }
       });
@@ -142,8 +251,8 @@ export default function AdminPage() {
     if (!user) return;
     let ignore = false;
     Promise.all([
-      fetch('/api/members').then((r) => r.json()),
-      fetch('/api/activities?show_all=true').then((r) => r.json()),
+      authFetch('/api/members').then((r) => r.json()),
+      authFetch('/api/activities?show_all=true').then((r) => r.json()),
     ])
       .then(([membersData, actsData]) => {
         if (!ignore) {
@@ -179,6 +288,7 @@ export default function AdminPage() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           username: usernameInput.trim(),
           password: passwordInput,
@@ -187,8 +297,15 @@ export default function AdminPage() {
       const data = await res.json();
       if (data.success && data.user) {
         setUser(data.user);
+        if (data.token) {
+          localStorage.setItem('gpm_auth_token', data.token);
+        } else {
+          getStoredAuthToken(data.user);
+        }
+        localStorage.setItem('gpm_auth_user', JSON.stringify(data.user));
         setUsernameInput('');
         setPasswordInput('');
+        showToast(`欢迎回来，${data.user.name}！`, 'success');
       } else {
         setLoginError(data.message || '登录失败');
       }
@@ -201,8 +318,17 @@ export default function AdminPage() {
 
   // Handle Logout
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    try {
+      await authFetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('gpm_auth_token');
+      localStorage.removeItem('gpm_auth_user');
+    }
     setUser(null);
+    showToast('已安全退出登录', 'info');
   };
 
   // When presenter is selected, exclude them from listeners automatically (as specified in Image 1 prompt)
@@ -255,7 +381,7 @@ export default function AdminPage() {
 
         try {
           const [planRes, noteRes] = await Promise.all([
-            fetch('/api/ai/generate', {
+            authFetch('/api/ai/generate', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -265,7 +391,7 @@ export default function AdminPage() {
                 date: newDate,
               }),
             }),
-            fetch('/api/ai/generate', {
+            authFetch('/api/ai/generate', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -287,7 +413,7 @@ export default function AdminPage() {
         }
       }
 
-      const res = await fetch('/api/activities', {
+      const res = await authFetch('/api/activities', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -316,20 +442,30 @@ export default function AdminPage() {
     }
   };
 
-  // Handle Delete Activity
-  const handleDeleteActivity = async (id: number, title: string) => {
-    if (!confirm(`确定删除“${title}”及该活动下的所有图片和记录吗？此操作不可逆。`)) return;
-    try {
-      const res = await fetch(`/api/activities/${id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) {
-        await loadData();
-      } else {
-        alert(data.message || '删除失败');
-      }
-    } catch {
-      alert('请求异常');
-    }
+  // Handle Delete Activity (using in-app modal for iframe stability)
+  const handleDeleteActivity = (id: number, title: string) => {
+    setDeleteModal({
+      isOpen: true,
+      title: '确认删除教研活动',
+      description: `确定要删除“${title}”及其关联的所有照片、总结材料和听课记录吗？此操作不可逆。`,
+      confirmLabel: '确认删除活动',
+      onConfirm: async () => {
+        try {
+          const res = await authFetch(`/api/activities/${id}`, {
+            method: 'DELETE',
+          });
+          const data = await res.json();
+          if (data.success) {
+            showToast('活动已成功删除', 'success');
+            await loadData();
+          } else {
+            showToast(data.message || '删除失败', 'error');
+          }
+        } catch {
+          showToast('删除活动请求异常', 'error');
+        }
+      },
+    });
   };
 
   // Trigger file upload
@@ -341,7 +477,7 @@ export default function AdminPage() {
     }
   };
 
-  // Direct upload for single or multiple files (supports drag-and-drop from WeChat or file picker)
+  // Direct upload for single or multiple files (parallel, fast, client-compressed)
   const handleDirectUpload = async (
     files: File[],
     activityId: number,
@@ -350,28 +486,75 @@ export default function AdminPage() {
   ) => {
     if (!files || files.length === 0) return;
     setUploading(true);
+    let successCount = 0;
+    let failCount = 0;
+
     try {
-      for (const file of files) {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('activity_id', String(activityId));
-        formData.append('file_type', fileType);
-        if (memberId) {
-          formData.append('member_id', String(memberId));
+      // 1. 客户端多图快速并行压缩 (基于 URL.createObjectURL，无主线程阻塞)
+      const compressedFiles = await Promise.all(
+        files.map(async (rawFile) => {
+          try {
+            return await compressImageIfNeeded(rawFile);
+          } catch {
+            return rawFile;
+          }
+        })
+      );
+
+      // 2. 并行上传云端
+      const uploadPromises = compressedFiles.map(async (file) => {
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('activity_id', String(activityId));
+          formData.append('file_type', fileType);
+          if (memberId) {
+            formData.append('member_id', String(memberId));
+          }
+
+          const res = await authFetch('/api/upload', {
+            method: 'POST',
+            body: formData,
+          });
+
+          let data: { success?: boolean; message?: string } | null = null;
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            try {
+              data = await res.json();
+            } catch {
+              data = null;
+            }
+          }
+
+          if (res.ok && data?.success) {
+            successCount++;
+          } else {
+            failCount++;
+            console.warn(`Upload ${file.name} failed:`, data?.message || res.status);
+          }
+        } catch (e) {
+          failCount++;
+          console.error('Upload file network error:', e);
         }
-        const res = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData,
-        });
-        const data = await res.json();
-        if (!data.success) {
-          alert(`上传 ${file.name} 失败: ${data.message || '请重试'}`);
-        }
-      }
+      });
+
+      await Promise.all(uploadPromises);
+
+      // 3. 立即刷新数据
       await loadData();
+
+      // 4. 给出明显友好的成功或异常反馈提示
+      if (successCount > 0 && failCount === 0) {
+        showToast(`🎉 成功上传 ${successCount} 个文件，已实时保存！`, 'success');
+      } else if (successCount > 0 && failCount > 0) {
+        showToast(`已成功上传 ${successCount} 个文件，${failCount} 个失败`, 'info');
+      } else if (failCount > 0) {
+        showToast('上传未成功，请检查文件格式或网络连接', 'error');
+      }
     } catch (err) {
       console.error('Upload error:', err);
-      alert('上传文件网络异常，请稍后重试');
+      showToast('上传处理遇到异常，请稍后重试', 'error');
     } finally {
       setUploading(false);
     }
@@ -379,51 +562,79 @@ export default function AdminPage() {
 
   // Process file upload
   const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !uploadTarget) return;
+    const rawFile = e.target.files?.[0];
+    if (!rawFile || !uploadTarget) return;
 
     setUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('activity_id', String(uploadTarget.activityId));
-    formData.append('file_type', uploadTarget.fileType);
-    if (uploadTarget.memberId) {
-      formData.append('member_id', String(uploadTarget.memberId));
-    }
-
     try {
-      const res = await fetch('/api/upload', {
+      const file = await compressImageIfNeeded(rawFile);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('activity_id', String(uploadTarget.activityId));
+      formData.append('file_type', uploadTarget.fileType);
+      if (uploadTarget.memberId) {
+        formData.append('member_id', String(uploadTarget.memberId));
+      }
+
+      const res = await authFetch('/api/upload', {
         method: 'POST',
         body: formData,
       });
-      const data = await res.json();
-      if (data.success) {
-        await loadData();
-      } else {
-        alert(data.message || '上传失败');
+
+      let data: { success?: boolean; message?: string } | null = null;
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        try {
+          data = await res.json();
+        } catch {
+          data = null;
+        }
       }
-    } catch {
-      alert('上传请求失败');
+
+      if (res.ok && data?.success) {
+        await loadData();
+        showToast(`🎉 文件“${rawFile.name}”上传成功！`, 'success');
+      } else {
+        showToast(data?.message || (res.status === 401 ? '登录状态已失效，请重新登录' : `上传失败 (HTTP ${res.status})`), 'error');
+      }
+    } catch (err) {
+      console.error('Upload select error:', err);
+      showToast('上传请求失败，请检查网络', 'error');
     } finally {
       setUploading(false);
       setUploadTarget(null);
     }
   };
 
-  // Delete upload item
-  const handleDeleteUpload = async (uploadId: number) => {
-    if (!confirm('确定删除该图片/文件吗？')) return;
-    try {
-      const res = await fetch(`/api/upload/${uploadId}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) {
-        await loadData();
-      } else {
-        alert(data.message || '删除失败');
-      }
-    } catch {
-      alert('删除失败');
-    }
+  // Delete upload item (using in-app modal)
+  const handleDeleteUpload = (uploadId: number, itemName: string = '此文件') => {
+    setDeleteModal({
+      isOpen: true,
+      title: '确认删除图片/文件',
+      description: `确定要删除“${itemName}”吗？删除后将从当前活动和云端永久移除。`,
+      confirmLabel: '确认删除',
+      onConfirm: async () => {
+        try {
+          const res = await authFetch(`/api/upload/${uploadId}`, {
+            method: 'DELETE',
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            showToast('图片/文件已成功删除', 'success');
+            await loadData();
+          } else {
+            if (res.status === 401) {
+              setUser(null);
+              showToast('登录状态失效，请在弹窗中重新登录', 'error');
+            } else {
+              showToast(data.message || '删除失败', 'error');
+            }
+          }
+        } catch {
+          showToast('删除请求失败，请检查网络', 'error');
+        }
+      },
+    });
   };
 
   // Print all or single
@@ -436,7 +647,7 @@ export default function AdminPage() {
 
   // Save display settings
   const handleSaveDisplaySetting = async (date: string | null) => {
-    await fetch('/api/settings', {
+    await authFetch('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -450,7 +661,7 @@ export default function AdminPage() {
 
   // Save Teaching Plan
   const handleSaveTeachingPlan = async (actId: number, content: string) => {
-    await fetch(`/api/activities/${actId}`, {
+    await authFetch(`/api/activities/${actId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ai_teaching_plan: content }),
@@ -460,7 +671,7 @@ export default function AdminPage() {
 
   // Save Listening Notes
   const handleSaveListeningNotes = async (actId: number, content: string) => {
-    await fetch(`/api/activities/${actId}`, {
+    await authFetch(`/api/activities/${actId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ listening_notes_template: content }),
@@ -470,7 +681,7 @@ export default function AdminPage() {
 
   // Regenerate AI listening notes
   const handleRegenerateListeningNotes = async (act: Activity) => {
-    const res = await fetch('/api/ai/generate', {
+    const res = await authFetch('/api/ai/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -942,9 +1153,7 @@ export default function AdminPage() {
                         {photos.length > 0 ? (
                           <div className="grid grid-cols-3 gap-2 pt-1">
                             {photos.map((p) => {
-                              const src = p.file_path.startsWith('/')
-                                ? p.file_path
-                                : `/${p.file_path}`;
+                              const src = resolveFileUrl(p.file_path);
                               return (
                                 <div
                                   key={p.id}
@@ -960,11 +1169,14 @@ export default function AdminPage() {
                                     }}
                                   />
                                   <button
-                                    onClick={() => handleDeleteUpload(p.id)}
-                                    className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    title="删除图片"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteUpload(p.id, `现场照片 (${p.file_name})`);
+                                    }}
+                                    className="absolute top-1.5 right-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md p-1 shadow-md transition-all duration-150 flex items-center justify-center opacity-90 group-hover:opacity-100 hover:scale-105"
+                                    title="删除此照片"
                                   >
-                                    <Trash2 className="w-3 h-3" />
+                                    <Trash2 className="w-3.5 h-3.5" />
                                   </button>
                                 </div>
                               );
@@ -994,9 +1206,7 @@ export default function AdminPage() {
                                   <>
                                     <button
                                       onClick={() => {
-                                        const src = attendance.file_path.startsWith('/')
-                                          ? attendance.file_path
-                                          : `/${attendance.file_path}`;
+                                        const src = resolveFileUrl(attendance.file_path);
                                         setLightboxImage(src);
                                         setLightboxTitle('成员签到表');
                                       }}
@@ -1005,7 +1215,7 @@ export default function AdminPage() {
                                       查看
                                     </button>
                                     <button
-                                      onClick={() => handleDeleteUpload(attendance.id)}
+                                      onClick={() => handleDeleteUpload(attendance.id, '成员签到表')}
                                       className="text-xs text-red-600 hover:underline"
                                     >
                                       删除
@@ -1042,9 +1252,7 @@ export default function AdminPage() {
                                   <>
                                     <button
                                       onClick={() => {
-                                        const src = summaryImg.file_path.startsWith('/')
-                                          ? summaryImg.file_path
-                                          : `/${summaryImg.file_path}`;
+                                        const src = resolveFileUrl(summaryImg.file_path);
                                         setLightboxImage(src);
                                         setLightboxTitle('活动总结材料');
                                       }}
@@ -1053,7 +1261,7 @@ export default function AdminPage() {
                                       查看
                                     </button>
                                     <button
-                                      onClick={() => handleDeleteUpload(summaryImg.id)}
+                                      onClick={() => handleDeleteUpload(summaryImg.id, '活动总结材料')}
                                       className="text-xs text-red-600 hover:underline"
                                     >
                                       删除
@@ -1109,7 +1317,7 @@ export default function AdminPage() {
                               <div className="flex items-center gap-1.5">
                                 {pptUpload && (
                                   <button
-                                    onClick={() => handleDeleteUpload(pptUpload.id)}
+                                    onClick={() => handleDeleteUpload(pptUpload.id, `课件PPT (${pptUpload.file_name})`)}
                                     className="text-xs text-red-600 hover:underline"
                                   >
                                     删除
@@ -1164,9 +1372,7 @@ export default function AdminPage() {
                               user.role === 'admin' || user.id === listener.id;
 
                             if (note) {
-                              const src = note.file_path.startsWith('/')
-                                ? note.file_path
-                                : `/${note.file_path}`;
+                              const src = resolveFileUrl(note.file_path);
                               return (
                                 <div
                                   key={listener.id}
@@ -1195,7 +1401,7 @@ export default function AdminPage() {
                                     </span>
                                     {canUploadThisMember && (
                                       <button
-                                        onClick={() => handleDeleteUpload(note.id)}
+                                        onClick={() => handleDeleteUpload(note.id, `${listener.name}的听课记录`)}
                                         className="text-xs text-red-500 hover:text-red-700"
                                         title="删除"
                                       >
@@ -1356,6 +1562,75 @@ export default function AdminPage() {
             setLightboxTitle(title);
           }}
         />
+      )}
+
+      {/* In-app Delete Confirmation Dialog (Iframe safe) */}
+      {deleteModal && deleteModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-gray-100">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0 text-red-600">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900">{deleteModal.title}</h3>
+                <p className="text-sm text-gray-600 mt-1 leading-relaxed">{deleteModal.description}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteModal(null)}
+                className="px-4 py-2 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer"
+                disabled={deleteModal.isProcessing}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setDeleteModal((prev) => (prev ? { ...prev, isProcessing: true } : null));
+                  try {
+                    await deleteModal.onConfirm();
+                  } finally {
+                    setDeleteModal(null);
+                  }
+                }}
+                disabled={deleteModal.isProcessing}
+                className="px-4 py-2 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer disabled:opacity-60"
+              >
+                {deleteModal.isProcessing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {deleteModal.confirmLabel || '确认删除'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating In-App Toast Notification */}
+      {toast && (
+        <div
+          className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-xl shadow-lg border text-sm font-medium transition-all duration-200 bg-white ${
+            toast.type === 'success'
+              ? 'border-emerald-200 text-emerald-800 shadow-emerald-500/10'
+              : toast.type === 'error'
+              ? 'border-red-200 text-red-800 shadow-red-500/10'
+              : 'border-blue-200 text-blue-800 shadow-blue-500/10'
+          }`}
+        >
+          {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />}
+          {toast.type === 'error' && <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />}
+          {toast.type === 'info' && <Info className="w-4 h-4 text-blue-600 shrink-0" />}
+          <span>{toast.message}</span>
+          <button
+            onClick={() => setToast(null)}
+            className="ml-2 text-gray-400 hover:text-gray-600 p-0.5 rounded cursor-pointer"
+            aria-label="关闭提示"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
       )}
 
       {/* 5. Print Sheet Formatted Component (Visible exclusively during window.print) */}

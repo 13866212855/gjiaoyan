@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { Upload, Image as ImageIcon, Loader2, Sparkles, FileSpreadsheet } from 'lucide-react';
+import { Upload, Image as ImageIcon, Loader2, Sparkles, FileSpreadsheet, CheckCircle2 } from 'lucide-react';
 
 interface DragDropUploadBoxProps {
   onUpload: (files: File[]) => Promise<void> | void;
@@ -28,6 +28,8 @@ export default function DragDropUploadBox({
 }: DragDropUploadBoxProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
+  const dragCounterRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Theme colors configuration
@@ -76,7 +78,15 @@ export default function DragDropUploadBox({
 
     try {
       setIsUploading(true);
+      setUploadSuccess(false);
       await onUpload(multiple ? files : [files[0]]);
+      setUploadSuccess(true);
+      setTimeout(() => {
+        setUploadSuccess(false);
+      }, 2500);
+    } catch (e) {
+      console.error('Drag upload failed:', e);
+      setUploadSuccess(false);
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) {
@@ -88,26 +98,33 @@ export default function DragDropUploadBox({
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    dragCounterRef.current++;
     if (!disabled) setIsDragging(true);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
     if (!disabled && !isDragging) setIsDragging(true);
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(false);
+    dragCounterRef.current--;
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
+      setIsDragging(false);
+    }
   };
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    dragCounterRef.current = 0;
     setIsDragging(false);
-    if (disabled) return;
+    if (disabled || isUploading) return;
 
     const extractedFiles: File[] = [];
     if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
@@ -115,12 +132,34 @@ export default function DragDropUploadBox({
         const item = e.dataTransfer.items[i];
         if (item.kind === 'file') {
           const f = item.getAsFile();
-          if (f) extractedFiles.push(f);
+          if (f) {
+            const validName = f.name && f.name.includes('.') ? f.name : `wechat_image_${Date.now()}_${i}.jpg`;
+            extractedFiles.push(new File([f], validName, { type: f.type || 'image/jpeg' }));
+          }
         }
       }
     } else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       for (let i = 0; i < e.dataTransfer.files.length; i++) {
-        extractedFiles.push(e.dataTransfer.files[i]);
+        const f = e.dataTransfer.files[i];
+        const validName = f.name && f.name.includes('.') ? f.name : `wechat_image_${Date.now()}_${i}.jpg`;
+        extractedFiles.push(new File([f], validName, { type: f.type || 'image/jpeg' }));
+      }
+    }
+
+    // 备选解析：针对微信或某些浏览器拖拽携带的 HTML/DataURL 图像
+    if (extractedFiles.length === 0) {
+      try {
+        const html = e.dataTransfer.getData('text/html');
+        if (html) {
+          const match = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+          if (match && match[1] && match[1].startsWith('data:image/')) {
+            const res = await fetch(match[1]);
+            const blob = await res.blob();
+            extractedFiles.push(new File([blob], `wechat_image_${Date.now()}.jpg`, { type: blob.type || 'image/jpeg' }));
+          }
+        }
+      } catch (dropErr) {
+        console.warn('Could not extract image from drag payload:', dropErr);
       }
     }
 
@@ -131,10 +170,17 @@ export default function DragDropUploadBox({
 
   // 支持键盘粘贴（从微信复制图片后直接 Ctrl+V）
   const handlePaste = async (e: React.ClipboardEvent) => {
-    if (disabled || !e.clipboardData?.files?.length) return;
-    e.preventDefault();
-    const files = Array.from(e.clipboardData.files);
-    await processFiles(files);
+    if (disabled) return;
+    if (e.clipboardData?.files?.length) {
+      e.preventDefault();
+      const files: File[] = [];
+      for (let i = 0; i < e.clipboardData.files.length; i++) {
+        const f = e.clipboardData.files[i];
+        const validName = f.name && f.name.includes('.') ? f.name : `pasted_image_${Date.now()}_${i}.jpg`;
+        files.push(new File([f], validName, { type: f.type || 'image/jpeg' }));
+      }
+      await processFiles(files);
+    }
   };
 
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -174,10 +220,15 @@ export default function DragDropUploadBox({
         disabled={disabled || isUploading}
       />
 
-      {isUploading ? (
+      {uploadSuccess ? (
+        <div className="flex items-center justify-center gap-1.5 py-2 text-xs text-emerald-700 font-semibold bg-emerald-50 rounded-lg">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 animate-pulse" />
+          <span>上传成功！已自动保存</span>
+        </div>
+      ) : isUploading ? (
         <div className="flex items-center justify-center gap-2 py-2 text-xs text-gray-600 font-medium animate-pulse">
           <Loader2 className={`w-4 h-4 animate-spin ${themeStyles.iconColor}`} />
-          <span>正在上传文件，请稍候...</span>
+          <span>正在快速上传云端，请稍候...</span>
         </div>
       ) : isDragging ? (
         <div className="flex flex-col items-center justify-center py-2 text-center">
