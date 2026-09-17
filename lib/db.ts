@@ -503,6 +503,13 @@ export async function addUploadRecord(data: {
   file_name: string;
   file_path: string;
 }): Promise<UploadItem> {
+  // 单例文件类型自动替换旧记录，避免产生重复脏数据
+  if (data.file_type === 'attendance_sheet' || data.file_type === 'summary_image' || data.file_type === 'ppt') {
+    await pool.query('DELETE FROM uploads WHERE activity_id = $1 AND file_type = $2', [data.activity_id, data.file_type]);
+  } else if (data.file_type === 'listening_note' && data.member_id) {
+    await pool.query('DELETE FROM uploads WHERE activity_id = $1 AND file_type = $2 AND member_id = $3', [data.activity_id, data.file_type, data.member_id]);
+  }
+
   const res = await pool.query(
     `INSERT INTO uploads (activity_id, member_id, file_type, file_name, file_path, uploaded_at)
      VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)

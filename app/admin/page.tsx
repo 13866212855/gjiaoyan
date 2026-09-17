@@ -22,6 +22,7 @@ import {
   Layers,
   FileCheck,
   Image as ImageIcon,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { Activity, Member, UploadItem } from '@/lib/db';
 import MemberManagementModal from '@/components/MemberManagementModal';
@@ -31,6 +32,8 @@ import TeachingPlanModal from '@/components/TeachingPlanModal';
 import ListeningNotesModal from '@/components/ListeningNotesModal';
 import LightboxModal from '@/components/LightboxModal';
 import PrintView from '@/components/PrintView';
+import SummaryPptModal from '@/components/SummaryPptModal';
+import DragDropUploadBox from '@/components/DragDropUploadBox';
 
 interface CurrentUser {
   id: number;
@@ -69,6 +72,7 @@ export default function AdminPage() {
   const [llmModalOpen, setLlmModalOpen] = useState(false);
   const [teachingPlanModalAct, setTeachingPlanModalAct] = useState<Activity | null>(null);
   const [listeningNotesModalAct, setListeningNotesModalAct] = useState<Activity | null>(null);
+  const [summaryPptModalAct, setSummaryPptModalAct] = useState<Activity | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [lightboxTitle, setLightboxTitle] = useState('');
 
@@ -337,6 +341,42 @@ export default function AdminPage() {
     }
   };
 
+  // Direct upload for single or multiple files (supports drag-and-drop from WeChat or file picker)
+  const handleDirectUpload = async (
+    files: File[],
+    activityId: number,
+    fileType: string,
+    memberId?: number | null
+  ) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('activity_id', String(activityId));
+        formData.append('file_type', fileType);
+        if (memberId) {
+          formData.append('member_id', String(memberId));
+        }
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await res.json();
+        if (!data.success) {
+          alert(`上传 ${file.name} 失败: ${data.message || '请重试'}`);
+        }
+      }
+      await loadData();
+    } catch (err) {
+      console.error('Upload error:', err);
+      alert('上传文件网络异常，请稍后重试');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   // Process file upload
   const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -491,7 +531,7 @@ export default function AdminPage() {
                   type="text"
                   value={usernameInput}
                   onChange={(e) => setUsernameInput(e.target.value)}
-                  placeholder="管理员输入 admin，教师输入自己姓名"
+                  placeholder="请输入账号或成员姓名"
                   className="w-full px-3.5 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5b52a3]"
                   required
                 />
@@ -506,7 +546,7 @@ export default function AdminPage() {
                   type="password"
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
-                  placeholder="管理员: admin123，教师: 123456"
+                  placeholder="请输入登录密码"
                   className="w-full px-3.5 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#5b52a3]"
                   required
                 />
@@ -522,37 +562,10 @@ export default function AdminPage() {
               </button>
             </form>
 
-            {/* Quick Fill Helpers for convenient testing */}
-            <div className="mt-6 pt-5 border-t border-gray-100">
-              <p className="text-xs text-gray-500 font-medium mb-2">快速填充快捷账号：</p>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUsernameInput('admin');
-                    setPasswordInput('admin123');
-                  }}
-                  className="px-2.5 py-1.5 text-xs text-[#5b52a3] bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors font-medium text-center"
-                >
-                  管理员 (admin)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUsernameInput('刘俊杰');
-                    setPasswordInput('123456');
-                  }}
-                  className="px-2.5 py-1.5 text-xs text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors font-medium text-center"
-                >
-                  教师 (刘俊杰)
-                </button>
-              </div>
-
-              <div className="mt-4 text-center">
-                <Link href="/" className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
-                  ← 返回公开展示前台
-                </Link>
-              </div>
+            <div className="mt-6 pt-4 border-t border-gray-100 text-center">
+              <Link href="/" className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                ← 返回公开展示前台
+              </Link>
             </div>
           </div>
         </div>
@@ -911,12 +924,23 @@ export default function AdminPage() {
                             className="px-2.5 py-1 text-xs text-white bg-[#5b52a3] hover:bg-[#4d4491] rounded flex items-center gap-1"
                           >
                             <Upload className="w-3 h-3" />
-                            上传照片
+                            选择文件
                           </button>
                         </div>
 
+                        {/* Drag and Drop Zone for Photos */}
+                        <DragDropUploadBox
+                          onUpload={(files) => handleDirectUpload(files, act.id, 'activity_photo')}
+                          accept="image/*"
+                          multiple={true}
+                          label="直接拖入现场照片（支持多选）"
+                          sublabel="可将微信聊天记录中的图片直接拖入立即上传"
+                          colorTheme="purple"
+                          compact={photos.length > 0}
+                        />
+
                         {photos.length > 0 ? (
-                          <div className="grid grid-cols-3 gap-2">
+                          <div className="grid grid-cols-3 gap-2 pt-1">
                             {photos.map((p) => {
                               const src = p.file_path.startsWith('/')
                                 ? p.file_path
@@ -947,7 +971,7 @@ export default function AdminPage() {
                             })}
                           </div>
                         ) : (
-                          <p className="text-xs text-gray-400 italic py-2">暂无上传的照片</p>
+                          <p className="text-[11px] text-gray-400 italic py-1 text-center">暂无上传的照片</p>
                         )}
                       </div>
 
@@ -958,77 +982,101 @@ export default function AdminPage() {
                           签到表与活动总结
                         </span>
 
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-xs bg-white p-2 rounded-lg border border-gray-200">
-                            <span className="text-gray-700">
-                              签到表: {attendance ? '已上传' : '未上传'}
-                            </span>
-                            <div className="flex items-center gap-1.5">
-                              {attendance && (
-                                <>
-                                  <button
-                                    onClick={() => {
-                                      const src = attendance.file_path.startsWith('/')
-                                        ? attendance.file_path
-                                        : `/${attendance.file_path}`;
-                                      setLightboxImage(src);
-                                      setLightboxTitle('成员签到表');
-                                    }}
-                                    className="text-xs text-blue-600 hover:underline"
-                                  >
-                                    查看
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteUpload(attendance.id)}
-                                    className="text-xs text-red-600 hover:underline"
-                                  >
-                                    删除
-                                  </button>
-                                </>
-                              )}
-                              <button
-                                onClick={() => triggerUpload(act.id, 'attendance_sheet')}
-                                className="px-2 py-0.5 text-xs text-white bg-emerald-600 hover:bg-emerald-700 rounded"
-                              >
-                                {attendance ? '重新上传' : '上传签到表'}
-                              </button>
+                        <div className="space-y-2.5">
+                          {/* 签到表项 */}
+                          <div className="bg-white p-2.5 rounded-lg border border-gray-200 space-y-1.5">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-gray-700 font-medium">
+                                签到表: {attendance ? '已上传' : '未上传'}
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                {attendance && (
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        const src = attendance.file_path.startsWith('/')
+                                          ? attendance.file_path
+                                          : `/${attendance.file_path}`;
+                                        setLightboxImage(src);
+                                        setLightboxTitle('成员签到表');
+                                      }}
+                                      className="text-xs text-blue-600 hover:underline"
+                                    >
+                                      查看
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteUpload(attendance.id)}
+                                      className="text-xs text-red-600 hover:underline"
+                                    >
+                                      删除
+                                    </button>
+                                  </>
+                                )}
+                                <button
+                                  onClick={() => triggerUpload(act.id, 'attendance_sheet')}
+                                  className="px-2 py-0.5 text-xs text-white bg-emerald-600 hover:bg-emerald-700 rounded"
+                                >
+                                  {attendance ? '重选' : '选择'}
+                                </button>
+                              </div>
                             </div>
+                            <DragDropUploadBox
+                              onUpload={(files) => handleDirectUpload(files, act.id, 'attendance_sheet')}
+                              accept="image/*"
+                              multiple={false}
+                              label={attendance ? '拖入更换签到表' : '拖入上传签到表'}
+                              sublabel="微信图片直接拖入立即上传"
+                              colorTheme="emerald"
+                              compact={true}
+                            />
                           </div>
 
-                          <div className="flex items-center justify-between text-xs bg-white p-2 rounded-lg border border-gray-200">
-                            <span className="text-gray-700">
-                              总结材料: {summaryImg ? '已上传' : '未上传'}
-                            </span>
-                            <div className="flex items-center gap-1.5">
-                              {summaryImg && (
-                                <>
-                                  <button
-                                    onClick={() => {
-                                      const src = summaryImg.file_path.startsWith('/')
-                                        ? summaryImg.file_path
-                                        : `/${summaryImg.file_path}`;
-                                      setLightboxImage(src);
-                                      setLightboxTitle('活动总结材料');
-                                    }}
-                                    className="text-xs text-blue-600 hover:underline"
-                                  >
-                                    查看
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteUpload(summaryImg.id)}
-                                    className="text-xs text-red-600 hover:underline"
-                                  >
-                                    删除
-                                  </button>
-                                </>
-                              )}
-                              <button
-                                onClick={() => triggerUpload(act.id, 'summary_image')}
-                                className="px-2 py-0.5 text-xs text-white bg-indigo-600 hover:bg-indigo-700 rounded"
-                              >
-                                {summaryImg ? '重新上传' : '上传总结图'}
-                              </button>
+                          {/* 总结材料项 */}
+                          <div className="bg-white p-2.5 rounded-lg border border-gray-200 space-y-1.5">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-gray-700 font-medium">
+                                总结材料: {summaryImg ? '已上传' : '未上传'}
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                {summaryImg && (
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        const src = summaryImg.file_path.startsWith('/')
+                                          ? summaryImg.file_path
+                                          : `/${summaryImg.file_path}`;
+                                        setLightboxImage(src);
+                                        setLightboxTitle('活动总结材料');
+                                      }}
+                                      className="text-xs text-blue-600 hover:underline"
+                                    >
+                                      查看
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteUpload(summaryImg.id)}
+                                      className="text-xs text-red-600 hover:underline"
+                                    >
+                                      删除
+                                    </button>
+                                  </>
+                                )}
+                                <button
+                                  onClick={() => triggerUpload(act.id, 'summary_image')}
+                                  className="px-2 py-0.5 text-xs text-white bg-indigo-600 hover:bg-indigo-700 rounded"
+                                >
+                                  {summaryImg ? '重选' : '选择'}
+                                </button>
+                              </div>
                             </div>
+                            <DragDropUploadBox
+                              onUpload={(files) => handleDirectUpload(files, act.id, 'summary_image')}
+                              accept="image/*"
+                              multiple={false}
+                              label={summaryImg ? '拖入更换总结图' : '拖入上传总结图'}
+                              sublabel="微信图片直接拖入立即上传"
+                              colorTheme="indigo"
+                              compact={true}
+                            />
                           </div>
                         </div>
                       </div>
@@ -1040,9 +1088,9 @@ export default function AdminPage() {
                           教学教案与课件资源
                         </span>
 
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between text-xs bg-white p-2 rounded-lg border border-gray-200">
-                            <span className="text-gray-700">电子教案</span>
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between text-xs bg-white p-2.5 rounded-lg border border-gray-200">
+                            <span className="text-gray-700 font-medium">电子教案</span>
                             <button
                               id={`open-teaching-plan-btn-${act.id}`}
                               onClick={() => setTeachingPlanModalAct(act)}
@@ -1053,26 +1101,37 @@ export default function AdminPage() {
                             </button>
                           </div>
 
-                          <div className="flex items-center justify-between text-xs bg-white p-2 rounded-lg border border-gray-200">
-                            <span className="text-gray-700">
-                              课件PPT: {pptUpload ? pptUpload.file_name : '待上传'}
-                            </span>
-                            <div className="flex items-center gap-1.5">
-                              {pptUpload && (
+                          <div className="bg-white p-2.5 rounded-lg border border-gray-200 space-y-1.5">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-gray-700 font-medium truncate max-w-[140px]">
+                                课件PPT: {pptUpload ? pptUpload.file_name : '待上传'}
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                {pptUpload && (
+                                  <button
+                                    onClick={() => handleDeleteUpload(pptUpload.id)}
+                                    className="text-xs text-red-600 hover:underline"
+                                  >
+                                    删除
+                                  </button>
+                                )}
                                 <button
-                                  onClick={() => handleDeleteUpload(pptUpload.id)}
-                                  className="text-xs text-red-600 hover:underline"
+                                  onClick={() => triggerUpload(act.id, 'ppt')}
+                                  className="px-2 py-0.5 text-xs text-white bg-teal-600 hover:bg-teal-700 rounded"
                                 >
-                                  删除
+                                  {pptUpload ? '重选' : '选择'}
                                 </button>
-                              )}
-                              <button
-                                onClick={() => triggerUpload(act.id, 'ppt')}
-                                className="px-2 py-0.5 text-xs text-white bg-teal-600 hover:bg-teal-700 rounded"
-                              >
-                                {pptUpload ? '更换PPT' : '上传PPT'}
-                              </button>
+                              </div>
                             </div>
+                            <DragDropUploadBox
+                              onUpload={(files) => handleDirectUpload(files, act.id, 'ppt')}
+                              accept=".ppt,.pptx,.pdf"
+                              multiple={false}
+                              label={pptUpload ? '拖入更换PPT课件' : '拖入上传课件PPT'}
+                              sublabel="支持.pptx/.ppt直接拖入"
+                              colorTheme="teal"
+                              compact={true}
+                            />
                           </div>
                         </div>
                       </div>
@@ -1151,9 +1210,9 @@ export default function AdminPage() {
                             return (
                               <div
                                 key={listener.id}
-                                className="p-3 bg-gray-50/80 border-2 border-dashed border-gray-200 rounded-xl text-center flex flex-col justify-between items-center h-32"
+                                className="p-3 bg-gray-50/80 border-2 border-dashed border-gray-200 rounded-xl text-center flex flex-col justify-between items-center min-h-32"
                               >
-                                <div>
+                                <div className="mb-2">
                                   <span className="text-xs font-semibold text-gray-700 block">
                                     {listener.name}
                                   </span>
@@ -1161,16 +1220,19 @@ export default function AdminPage() {
                                 </div>
 
                                 {canUploadThisMember ? (
-                                  <button
-                                    id={`upload-note-btn-${act.id}-${listener.id}`}
-                                    onClick={() =>
-                                      triggerUpload(act.id, 'listening_note', listener.id)
-                                    }
-                                    className="w-full py-1 text-[11px] font-medium text-white bg-[#5b52a3] hover:bg-[#4d4491] rounded flex items-center justify-center gap-1 transition-colors"
-                                  >
-                                    <Upload className="w-3 h-3" />
-                                    上传笔记
-                                  </button>
+                                  <div className="w-full">
+                                    <DragDropUploadBox
+                                      onUpload={(files) =>
+                                        handleDirectUpload(files, act.id, 'listening_note', listener.id)
+                                      }
+                                      accept="image/*"
+                                      multiple={false}
+                                      label="拖入/上传笔记"
+                                      sublabel="微信图片可直接拖入"
+                                      colorTheme="purple"
+                                      compact={true}
+                                    />
+                                  </div>
                                 ) : (
                                   <span className="text-[10px] text-gray-400">仅本人或管理员可传</span>
                                 )}
@@ -1186,7 +1248,7 @@ export default function AdminPage() {
                     </div>
 
                     {/* Bottom Action bar */}
-                    <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100">
+                    <div className="flex flex-wrap items-center justify-end gap-2.5 pt-3 border-t border-gray-100">
                       <Link
                         href="/"
                         target="_blank"
@@ -1195,6 +1257,15 @@ export default function AdminPage() {
                         <ExternalLink className="w-3.5 h-3.5 text-gray-500" />
                         前台展示效果
                       </Link>
+
+                      <button
+                        id={`open-summary-ppt-btn-${act.id}`}
+                        onClick={() => setSummaryPptModalAct(act)}
+                        className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#e08e00] hover:bg-[#c97f00] rounded-lg flex items-center gap-1.5 shadow-xs transition-all hover:scale-105"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5 text-white" />
+                        活动总结单页PPT (4图标准版)
+                      </button>
 
                       <button
                         id={`print-single-act-btn-${act.id}`}
@@ -1274,6 +1345,18 @@ export default function AdminPage() {
         imageUrl={lightboxImage || ''}
         title={lightboxTitle}
       />
+
+      {summaryPptModalAct && (
+        <SummaryPptModal
+          isOpen={Boolean(summaryPptModalAct)}
+          onClose={() => setSummaryPptModalAct(null)}
+          activity={summaryPptModalAct}
+          onOpenLightbox={(src, title) => {
+            setLightboxImage(src);
+            setLightboxTitle(title);
+          }}
+        />
+      )}
 
       {/* 5. Print Sheet Formatted Component (Visible exclusively during window.print) */}
       <PrintView activities={printActivities} isAll={printActivities.length > 1} />
