@@ -24,7 +24,6 @@ export async function POST(req: NextRequest) {
     if (!file) {
       return NextResponse.json({ success: false, message: '请选择要上传的文件' }, { status: 400 });
     }
-
     if (!activityIdStr) {
       return NextResponse.json({ success: false, message: '缺少活动ID' }, { status: 400 });
     }
@@ -32,7 +31,7 @@ export async function POST(req: NextRequest) {
     const activityId = Number(activityIdStr);
     const memberId = memberIdStr ? Number(memberIdStr) : null;
 
-    // 权限检查：成员只能上传自己的听课记录
+    // 权限检查：普通成员只能上传自己的听课记录
     if (user.role === 'member') {
       if (fileType !== 'listening_note' || memberId !== user.id) {
         return NextResponse.json(
@@ -45,22 +44,28 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const originalName = file.name || 'upload.jpg';
     const safeType = fileType.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const isImage = fileType !== 'courseware_ppt' && !/\.(ppt|pptx|pdf|doc|docx|zip|rar)$/i.test(originalName);
+
+    // 判定是否为图片资源（全面支持手机拍图各类格式）
+    const isDocOrPpt = /\.(ppt|pptx|pdf|doc|docx|zip|rar)$/i.test(originalName);
+    const isImage = fileType !== 'courseware_ppt' && !isDocOrPpt;
 
     let finalFilePath = '';
 
     try {
       // 优先直接上传至 Cloudinary 永久云存储
+      // 并强制将手机 HEIC/PNG 等图片格式转换为通用的 JPG，确保手机和电脑端 100% 正常显示
       const folderName = `gengpeng_teaching/activity_${activityId}/${safeType}`;
       const uploadRes = await uploadToCloudinary(buffer, {
         folder: folderName,
         resource_type: isImage ? 'image' : 'auto',
+        format: isImage ? 'jpg' : undefined,
+        timeoutMs: 50000,
       });
       finalFilePath = uploadRes.secure_url;
       console.log('Cloudinary upload success:', finalFilePath);
     } catch (cloudErr) {
       console.error('Cloudinary upload failed, falling back to local disk:', cloudErr);
-      
+
       // 本地回退保存
       const relativeDir = path.join('uploads', 'activities', String(activityId), safeType);
       const absoluteDir = path.join(process.cwd(), 'public', relativeDir);
@@ -70,6 +75,7 @@ export async function POST(req: NextRequest) {
       const sanitizedName = originalName.replace(/[^a-zA-Z0-9._-]/g, '_');
       const diskFileName = `${timestamp}_${sanitizedName}`;
       const absoluteFilePath = path.join(absoluteDir, diskFileName);
+
       await fs.promises.writeFile(absoluteFilePath, buffer);
       finalFilePath = path.join(relativeDir, diskFileName).replace(/\\/g, '/');
     }

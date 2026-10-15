@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
-import { Upload, Image as ImageIcon, Loader2, Sparkles, FileSpreadsheet, CheckCircle2 } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Upload, CheckCircle2, Loader2 } from 'lucide-react';
 
 interface DragDropUploadBoxProps {
   onUpload: (files: File[]) => Promise<void> | void;
@@ -9,37 +9,36 @@ interface DragDropUploadBoxProps {
   multiple?: boolean;
   label?: string;
   sublabel?: string;
-  colorTheme?: 'purple' | 'emerald' | 'indigo' | 'teal' | 'blue';
-  compact?: boolean;
-  className?: string;
   disabled?: boolean;
+  className?: string;
+  compact?: boolean;
+  colorTheme?: 'purple' | 'emerald' | 'indigo' | 'teal' | 'blue';
 }
 
 export default function DragDropUploadBox({
   onUpload,
-  accept = 'image/*',
+  accept = 'image/*,.heic,.heif',
   multiple = false,
-  label = '点击或直接拖入文件',
-  sublabel = '支持从微信聊天直接拖入图片',
-  colorTheme = 'purple',
-  compact = false,
-  className = '',
+  label = '点击或拖拽图片至此处上传',
+  sublabel = '支持直接拖入文件或微信截图',
   disabled = false,
+  className = '',
+  compact = false,
+  colorTheme = 'purple',
 }: DragDropUploadBoxProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const dragCounterRef = useRef(0);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Theme colors configuration
   const themeStyles = {
     purple: {
-      border: 'border-purple-300 hover:border-[#5B52A3]',
-      activeBorder: 'border-[#5B52A3] bg-purple-50/80 ring-2 ring-purple-400/40',
-      iconColor: 'text-[#5B52A3]',
-      badgeBg: 'bg-purple-100 text-[#5B52A3]',
-      buttonBg: 'bg-[#5B52A3] hover:bg-[#4D4491] text-white',
+      border: 'border-purple-300 hover:border-[#5b52a3]',
+      activeBorder: 'border-[#5b52a3] bg-purple-50/80 ring-2 ring-purple-400/40',
+      iconColor: 'text-[#5b52a3]',
+      badgeBg: 'bg-purple-100 text-[#5b52a3]',
+      buttonBg: 'bg-[#5b52a3] hover:bg-[#4d4491] text-white',
     },
     emerald: {
       border: 'border-emerald-300 hover:border-emerald-600',
@@ -70,6 +69,9 @@ export default function DragDropUploadBox({
       buttonBg: 'bg-blue-600 hover:bg-blue-700 text-white',
     },
   }[colorTheme];
+
+  const effectiveAccept =
+    accept === 'image/*' ? 'image/*,.heic,.heif,.jpg,.jpeg,.png,.webp' : accept;
 
   const processFiles = async (fileList: FileList | File[]) => {
     if (disabled || isUploading) return;
@@ -124,9 +126,11 @@ export default function DragDropUploadBox({
     e.stopPropagation();
     dragCounterRef.current = 0;
     setIsDragging(false);
+
     if (disabled || isUploading) return;
 
     const extractedFiles: File[] = [];
+
     if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
       for (let i = 0; i < e.dataTransfer.items.length; i++) {
         const item = e.dataTransfer.items[i];
@@ -146,7 +150,6 @@ export default function DragDropUploadBox({
       }
     }
 
-    // 备选解析：针对微信或某些浏览器拖拽携带的 HTML/DataURL 图像
     if (extractedFiles.length === 0) {
       try {
         const html = e.dataTransfer.getData('text/html');
@@ -168,7 +171,6 @@ export default function DragDropUploadBox({
     }
   };
 
-  // 支持键盘粘贴（从微信复制图片后直接 Ctrl+V）
   const handlePaste = async (e: React.ClipboardEvent) => {
     if (disabled) return;
     if (e.clipboardData?.files?.length) {
@@ -189,12 +191,6 @@ export default function DragDropUploadBox({
     }
   };
 
-  const handleClick = () => {
-    if (!disabled && !isUploading && fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  };
-
   return (
     <div
       tabIndex={0}
@@ -203,20 +199,26 @@ export default function DragDropUploadBox({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       onPaste={handlePaste}
-      onClick={handleClick}
-      className={`relative cursor-pointer select-none transition-all duration-150 border-2 border-dashed rounded-xl outline-none focus:ring-2 focus:ring-purple-300 ${
+      className={`relative select-none transition-all duration-150 border-2 border-dashed rounded-xl outline-none focus:ring-2 focus:ring-purple-300 ${
         isDragging
           ? themeStyles.activeBorder
           : `${themeStyles.border} bg-white hover:bg-gray-50/80`
-      } ${compact ? 'p-2' : 'p-3'} ${className} ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+      } ${compact ? 'p-2' : 'p-3'} ${className} ${disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
     >
+      {/* 
+        手机端与电脑端原生穿透点击：
+        使用绝对定位且透明度为 0 的 input 覆盖整个上传区域，
+        使得手机端触摸屏幕时直接调起相册/相机，无需依赖容易被系统安全策略拦截的模拟 click() 
+      */}
       <input
         ref={fileInputRef}
         type="file"
-        accept={accept}
+        accept={effectiveAccept}
         multiple={multiple}
         onChange={handleFileInputChange}
-        className="hidden"
+        className={`absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 ${
+          disabled || isUploading ? 'pointer-events-none' : ''
+        }`}
         disabled={disabled || isUploading}
       />
 
@@ -243,7 +245,7 @@ export default function DragDropUploadBox({
             <span className="truncate font-medium">{label}</span>
           </div>
           <span className={`text-[10px] px-1.5 py-0.5 rounded font-normal shrink-0 ${themeStyles.badgeBg}`}>
-            可直接拖入
+            点击或拖入
           </span>
         </div>
       ) : (
@@ -255,7 +257,7 @@ export default function DragDropUploadBox({
           <p className="text-[11px] text-gray-500 flex items-center gap-1">
             <span>{sublabel}</span>
             <span className="text-[10px] bg-gray-100 text-gray-600 px-1 py-0.2 rounded border border-gray-200">
-              或Ctrl+V粘贴
+              相册/截图
             </span>
           </p>
         </div>

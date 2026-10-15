@@ -108,6 +108,7 @@ export default function PrintView({ activities, isAll = false }: PrintViewProps)
                     <img
                       src={resolveFileUrl(p.file_path)}
                       alt={`现场照片 ${idx + 1}`}
+                      referrerPolicy="no-referrer"
                       className="w-full h-44 object-cover"
                     />
                     <div className="text-xs text-gray-600 mt-1">现场活动照片 {idx + 1}</div>
@@ -128,6 +129,7 @@ export default function PrintView({ activities, isAll = false }: PrintViewProps)
                       <img
                         src={resolveFileUrl(attendance.file_path)}
                         alt="签到表"
+                        referrerPolicy="no-referrer"
                         className="w-full h-48 object-cover"
                       />
                       <div className="text-xs text-gray-600 mt-1">教研活动全员签到表</div>
@@ -138,6 +140,7 @@ export default function PrintView({ activities, isAll = false }: PrintViewProps)
                       <img
                         src={resolveFileUrl(summaryImg.file_path)}
                         alt="活动总结"
+                        referrerPolicy="no-referrer"
                         className="w-full h-48 object-cover"
                       />
                       <div className="text-xs text-gray-600 mt-1">教研活动总结材料</div>
@@ -159,6 +162,7 @@ export default function PrintView({ activities, isAll = false }: PrintViewProps)
                       <img
                         src={resolveFileUrl(ln.file_path)}
                         alt={ln.file_name}
+                        referrerPolicy="no-referrer"
                         className="w-full h-44 object-cover"
                       />
                       <div className="text-xs text-gray-700 mt-1 font-medium">

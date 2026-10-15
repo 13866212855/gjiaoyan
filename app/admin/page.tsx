@@ -795,7 +795,7 @@ export default function AdminPage() {
         ref={fileInputRef}
         onChange={handleFileSelected}
         className="hidden"
-        accept="image/*,.pdf,.ppt,.pptx,.doc,.docx"
+        accept="image/*,.heic,.heif,.jpg,.jpeg,.png,.webp,.pdf,.ppt,.pptx,.doc,.docx"
       />
 
       {/* 1. Header Bar matching Image 1 */}

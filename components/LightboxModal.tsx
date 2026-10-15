@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { X, Download, ExternalLink } from 'lucide-react';
+import { resolveFileUrl } from '@/lib/utils';
 
 interface LightboxModalProps {
   isOpen: boolean;
@@ -18,6 +19,8 @@ export default function LightboxModal({
 }: LightboxModalProps) {
   if (!isOpen || !imageUrl) return null;
 
+  const finalSrc = resolveFileUrl(imageUrl);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-xs"
@@ -29,10 +32,12 @@ export default function LightboxModal({
       >
         {/* Actions bar */}
         <div className="w-full flex items-center justify-between text-white pb-3 px-2">
-          <span className="text-sm font-medium text-gray-200">{title || '图片预览'}</span>
+          <span className="text-sm font-medium text-gray-200 truncate max-w-[60vw]">
+            {title || '图片预览'}
+          </span>
           <div className="flex items-center gap-2">
             <a
-              href={imageUrl}
+              href={finalSrc}
               target="_blank"
               rel="noreferrer"
               className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors flex items-center gap-1 text-xs"
@@ -41,7 +46,7 @@ export default function LightboxModal({
               新窗口打开
             </a>
             <a
-              href={imageUrl}
+              href={finalSrc}
               download
               className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors flex items-center gap-1 text-xs"
             >
@@ -60,8 +65,9 @@ export default function LightboxModal({
         {/* Image */}
         <div className="overflow-auto max-h-[82vh] rounded-lg shadow-2xl bg-black/40 flex items-center justify-center">
           <img
-            src={imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`}
+            src={finalSrc}
             alt={title || '预览'}
+            referrerPolicy="no-referrer"
             className="max-h-[80vh] max-w-full object-contain rounded-lg"
           />
         </div>

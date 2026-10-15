@@ -7,10 +7,13 @@ import { getActivityById, Activity } from '@/lib/db';
 
 async function getBase64Image(filePath: string | undefined | null): Promise<string | null> {
   if (!filePath) return null;
-  const trimmed = filePath.trim();
+  let trimmed = filePath.trim();
 
   // 1. 支持远程 Cloudinary HTTPS 图片链接
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    if (/res\.cloudinary\.com/i.test(trimmed)) {
+      trimmed = trimmed.replace(/\.(heic|heif)$/i, '.jpg');
+    }
     try {
       const res = await fetch(trimmed);
       if (res.ok) {

@@ -230,6 +230,8 @@ export default function HomePage() {
                         <img
                           src={src}
                           alt={photo.file_name}
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         />
                         <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-medium gap-1">
@@ -296,6 +298,8 @@ export default function HomePage() {
                           <img
                             src={src}
                             alt={`${listener.name}听课记录`}
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
                             className="w-full h-full object-cover rounded-lg"
                           />
                           <span className="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-0.5 rounded backdrop-blur-xs font-medium">
